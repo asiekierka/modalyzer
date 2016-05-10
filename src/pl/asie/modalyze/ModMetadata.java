@@ -9,8 +9,8 @@ public class ModMetadata {
     public String name;
     public String description;
     public String version;
-    public String mcversion;
     public String homepage;
+    public String side;
     public List<String> authors;
     public Map<String, String> dependencies;
 }

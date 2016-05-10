@@ -1,9 +1,8 @@
 package pl.asie.modalyze;
 
-import org.objectweb.asm.AnnotationVisitor;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.*;
+import pl.asie.modalyze.mcp.MCPDataManager;
+import pl.asie.modalyze.mcp.MCPUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -13,8 +12,63 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-public class Modalyzer {
+public class ModAnalyzer {
+    public static final MCPDataManager MCP = new MCPDataManager();
     private static final List<String> FORGE_MOD_ANNOTATIONS = Arrays.asList("Lcpw/mods/fml/common/Mod;", "Lnet/minecraftforge/fml/common/Mod;");
+    private final Set<String> keys = new HashSet<>();
+    private final File file;
+    private boolean versionHeuristics;
+
+    public class ModHMethodVisitor extends MethodVisitor {
+        public ModHMethodVisitor() {
+            super(Opcodes.ASM5);
+        }
+
+        @Override
+        public void visitMethodInsn(int opcode, String owner, String name,
+                                    String desc, boolean itf) {
+            keys.add(MCPUtils.getMethodKey(owner + "/" + name, desc));
+        }
+    }
+
+    public class ModAnnotationVisitor extends AnnotationVisitor {
+        private final ModMetadata metadata;
+        private Map<String, Object> data = new HashMap<>();
+
+        public ModAnnotationVisitor(ModMetadata metadata) {
+            super(Opcodes.ASM5);
+            this.metadata = metadata;
+        }
+
+        @Override
+        public void visit(String name, Object value) {
+            data.put(name, value);
+        }
+
+        @Override
+        public void visitEnum(String name, String desc, String value) {
+            data.put(name, value);
+        }
+
+        @Override
+        public void visitEnd() {
+            if (data.containsKey("modid")) {
+                metadata.provides = StringUtils.append(metadata.provides, (String) data.get("modid"));
+            }
+            if (data.containsKey("version")) {
+                metadata.version = StringUtils.select(metadata.version, (String) data.get("version"));
+            }
+            if (data.containsKey("dependencies")) {
+                List<String> dependencies = Arrays.asList(((String) data.get("dependencies")).split(";"));
+                for (String s : dependencies) {
+                    String[] dep = s.split(":");
+                    if (dep.length == 2 && dep[0].startsWith("required")) {
+                        metadata.dependencies = addDependency(metadata.dependencies, dep[1]);
+                    }
+                }
+            }
+        }
+    }
 
     public class ModClassVisitor extends ClassVisitor {
         private final ModMetadata metadata;
@@ -25,49 +79,32 @@ public class Modalyzer {
         }
 
         @Override
+        public MethodVisitor visitMethod(int access, String name, String desc,
+                                         String signature, String[] exceptions) {
+            if (versionHeuristics) {
+                return new ModHMethodVisitor();
+            } else {
+                return super.visitMethod(access, name, desc, signature, exceptions);
+            }
+        }
+
+        @Override
         public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
             if (FORGE_MOD_ANNOTATIONS.contains(desc)) {
-                AnnotationVisitor visitor = new AnnotationVisitor(Opcodes.ASM5) {
-                    private Map<String, Object> data = new HashMap<>();
-
-                    @Override
-                    public void visit(String name, Object value) {
-                        data.put(name, value);
-                    }
-
-                    @Override
-                    public void visitEnum(String name, String desc, String value) {
-                        data.put(name, value);
-                    }
-
-                    @Override
-                    public void visitEnd() {
-                        if (data.containsKey("modid")) {
-                            metadata.provides = StringUtils.append(metadata.provides, (String) data.get("modid"));
-                        }
-                        if (data.containsKey("version")) {
-                            metadata.version = StringUtils.select(metadata.version, (String) data.get("version"));
-                        }
-                        if (data.containsKey("dependencies")) {
-                            List<String> dependencies = Arrays.asList(((String) data.get("dependencies")).split(";"));
-                            for (String s : dependencies) {
-                                String[] dep = s.split(":");
-                                if (dep.length == 2 && dep[0].startsWith("required")) {
-                                    metadata.dependencies = addDependency(metadata.dependencies, dep[1]);
-                                }
-                            }
-                        }
-                    }
-                };
-
-                return visitor;
+                return new ModAnnotationVisitor(metadata);
+            } else {
+                return super.visitAnnotation(desc, visible);
             }
-            return super.visitAnnotation(desc, visible);
         }
     }
 
-    public Modalyzer() {
+    public ModAnalyzer(File file) {
+        this.file = file;
+    }
 
+    public ModAnalyzer setVersionHeuristics(boolean v) {
+        versionHeuristics = v;
+        return this;
     }
 
     private Map<String, String> addDependency(Map<String, String> deps, String dep) {
@@ -124,8 +161,10 @@ public class Modalyzer {
                 metadata.name = StringUtils.selectLonger(entry.name, metadata.name);
                 metadata.description = StringUtils.select(entry.description, metadata.description);
                 metadata.version = StringUtils.select(entry.version, metadata.version);
-                metadata.mcversion = StringUtils.select(entry.mcversion, metadata.mcversion);
                 metadata.homepage = StringUtils.select(entry.url, metadata.homepage);
+                if (entry.mcversion != null) {
+                    metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + entry.mcversion);
+                }
                 if (entry.authorList != null) {
                     metadata.authors = StringUtils.append(metadata.authors, entry.authorList);
                 }
@@ -153,39 +192,7 @@ public class Modalyzer {
         }
     }
 
-    private void appendModMetadata(Map<String, Map<String, ModMetadata>> metaMap, ModMetadata metadata) {
-        if (metadata != null && metadata.modid != null) {
-            String version = metadata.version != null ? metadata.version : "UNKNOWN";
-
-            if (!metaMap.containsKey(metadata.modid)) {
-                metaMap.put(metadata.modid, new HashMap<>());
-            }
-            Map<String, ModMetadata> versions = metaMap.get(metadata.modid);
-            versions.put(version, metadata);
-        }
-    }
-
-    public Map<String, Map<String, ModMetadata>> analyzeMods(File file, boolean recursive) {
-        Map<String, Map<String, ModMetadata>> metaMap = new HashMap<>();
-
-        if (!file.isDirectory()) {
-            appendModMetadata(metaMap, analyzeModFile(file));
-        } else {
-            for (File f : file.listFiles()) {
-                if (f.isDirectory()) {
-                    if (recursive) {
-                        metaMap.putAll(analyzeMods(f, recursive));
-                    }
-                } else {
-                    appendModMetadata(metaMap, analyzeModFile(f));
-                }
-            }
-        }
-
-        return metaMap;
-    }
-
-    public ModMetadata analyzeModFile(File file) {
+    public ModMetadata analyze() {
         ModMetadata metadata = new ModMetadata();
         System.out.println("[*] " + file.toString());
 
@@ -226,6 +233,44 @@ public class Modalyzer {
             }
         }
 
-        return metadata.modid != null ? metadata : null;
+        if (versionHeuristics) {
+            //if (true || metadata.dependencies == null || !metadata.dependencies.containsKey("minecraft")) {
+                Set<String> versions = new HashSet<>();
+                String version;
+                boolean hasClient = false, hasServer = false;
+                for (String s : MCP.getVersionsForKeySet(keys)) {
+                    if (s.endsWith("-client")) {
+                        hasClient = true;
+                    } else if (s.endsWith("-server")) {
+                        hasServer = true;
+                    }
+                    versions.add(s.split("-")[0]);
+                }
+
+                if (versions.size() == 1) {
+                    version = (String) versions.toArray()[0];
+                } else {
+                    version = Arrays.toString(versions.toArray(new String[versions.size()]));
+                }
+
+                boolean hasSides = false;
+                for (String s : versions) {
+                    if (MCP.hasSides(s)) {
+                        hasSides = true;
+                        break;
+                    }
+                }
+
+                String side = (!hasSides || hasClient == hasServer) ? "universal" : (hasClient ? "client" : "server");
+                metadata.side = side;
+                metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + version);
+            //}
+        }
+
+        if (metadata.modid == null) {
+            metadata.modid = file.getName();
+        }
+
+        return metadata;
     }
 }
