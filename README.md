@@ -7,6 +7,7 @@ Currently, it supports the following methods of gathering metadata:
 * mcmod.info files
 * Forge @Mod annotations
 * MCP mapping heuristics to determine sidedness/Minecraft version (requires MCP ZIPs to be downloaded manually)
+* (Optional) Generating SHA256 hashes of mods
 
 For help, type "java -jar Modalyzer.jar help".
 
