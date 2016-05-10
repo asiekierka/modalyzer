@@ -5,6 +5,7 @@ import java.util.Map;
 
 public class ModMetadata {
     public String modid;
+    public List<String> provides;
     public String name;
     public String description;
     public String version;

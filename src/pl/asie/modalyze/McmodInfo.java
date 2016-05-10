@@ -58,9 +58,11 @@ public class McmodInfo {
                 if (info.modList == null) {
                     info = null;
                 }
-            } catch (JsonSyntaxException ee) {
+            } catch (Exception ee) {
                 info = null;
             }
+        } catch (Exception e) {
+            info = null;
         }
 
         return info;

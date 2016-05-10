@@ -10,17 +10,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 public class Modalyzer {
     private static final List<String> FORGE_MOD_ANNOTATIONS = Arrays.asList("Lcpw/mods/fml/common/Mod;", "Lnet/minecraftforge/fml/common/Mod;");
 
     public class ModClassVisitor extends ClassVisitor {
-        private final Map<String, ModMetadata> metaMap;
+        private final ModMetadata metadata;
 
-        public ModClassVisitor(Map<String, ModMetadata> metadataMap) {
+        public ModClassVisitor(ModMetadata metadata) {
             super(Opcodes.ASM5);
-            this.metaMap = metadataMap;
+            this.metadata = metadata;
         }
 
         @Override
@@ -42,20 +43,17 @@ public class Modalyzer {
                     @Override
                     public void visitEnd() {
                         if (data.containsKey("modid")) {
-                            ModMetadata metadata = getOrCreate(metaMap, (String) data.get("modid"));
-                            if (data.containsKey("name")) {
-                                metadata.name = StringUtils.selectLonger(metadata.name, (String) data.get("name"));
-                            }
-                            if (data.containsKey("version")) {
-                                metadata.version = StringUtils.select(metadata.version, (String) data.get("version"));
-                            }
-                            if (data.containsKey("dependencies")) {
-                                List<String> dependencies = Arrays.asList(((String) data.get("dependencies")).split(";"));
-                                for (String s : dependencies) {
-                                    String[] dep = s.split(":");
-                                    if (dep.length == 2 && dep[0].startsWith("required")) {
-                                        metadata.dependencies = addDependency(metadata.dependencies, dep[1]);
-                                    }
+                            metadata.provides = StringUtils.append(metadata.provides, (String) data.get("modid"));
+                        }
+                        if (data.containsKey("version")) {
+                            metadata.version = StringUtils.select(metadata.version, (String) data.get("version"));
+                        }
+                        if (data.containsKey("dependencies")) {
+                            List<String> dependencies = Arrays.asList(((String) data.get("dependencies")).split(";"));
+                            for (String s : dependencies) {
+                                String[] dep = s.split(":");
+                                if (dep.length == 2 && dep[0].startsWith("required")) {
+                                    metadata.dependencies = addDependency(metadata.dependencies, dep[1]);
                                 }
                             }
                         }
@@ -79,10 +77,13 @@ public class Modalyzer {
 
         String modName = dep;
         String modVersion = "*";
-        if (dep.contains("@")) {
+        if (dep.contains("@") && dep.split("@").length == 2) {
             modName = dep.split("@")[0];
             modVersion = dep.split("@")[1];
         }
+
+        modName = modName.trim();
+        modVersion = modVersion.trim();
 
         if (deps.containsKey(modName)) {
             if (!"*".equals(modVersion) && "*".equals(deps.get(modName))) {
@@ -105,7 +106,7 @@ public class Modalyzer {
         return metadata;
     }
 
-    private void appendMcmodInfo(Map<String, ModMetadata> metaMap, InputStream stream) throws IOException {
+    private void appendMcmodInfo(ModMetadata metadata, InputStream stream) throws IOException {
         McmodInfo info = McmodInfo.get(stream);
         if (info != null && info.modList != null) {
             for (McmodInfo.Entry entry : info.modList) {
@@ -113,7 +114,13 @@ public class Modalyzer {
                     continue;
                 }
 
-                ModMetadata metadata = getOrCreate(metaMap, entry.modid);
+                if (metadata.modid == null) {
+                    metadata.modid = entry.modid;
+                } else if (!metadata.modid.equals(entry.modid)) {
+                    continue;
+                }
+
+                metadata.provides = StringUtils.append(metadata.provides, entry.modid);
                 metadata.name = StringUtils.selectLonger(entry.name, metadata.name);
                 metadata.description = StringUtils.select(entry.description, metadata.description);
                 metadata.version = StringUtils.select(entry.version, metadata.version);
@@ -127,34 +134,61 @@ public class Modalyzer {
                 }
                 if (entry.requiredMods != null) {
                     for (String s : entry.requiredMods) {
-                        metadata.dependencies = addDependency(metadata.dependencies, s);
+                        if (!StringUtils.isEmpty(s)) {
+                            metadata.dependencies = addDependency(metadata.dependencies, s);
+                        }
                     }
                 }
             }
         }
     }
 
-    private void appendClassInfo(Map<String, ModMetadata> metaMap, InputStream stream) throws IOException {
-        ClassVisitor visitor = new ModClassVisitor(metaMap);
-        ClassReader reader = new ClassReader(stream);
-        reader.accept(visitor, 0);
+    private void appendClassInfo(ModMetadata metadata, InputStream stream) throws IOException {
+        try {
+            ClassVisitor visitor = new ModClassVisitor(metadata);
+            ClassReader reader = new ClassReader(stream);
+            reader.accept(visitor, 0);
+        } catch (Exception e) {
+            // Oh well.
+        }
     }
 
-    public Map<String, ModMetadata> analyzeMods(File file) {
-        Map<String, ModMetadata> metadata = new HashMap<>();
+    private void appendModMetadata(Map<String, Map<String, ModMetadata>> metaMap, ModMetadata metadata) {
+        if (metadata != null && metadata.modid != null) {
+            String version = metadata.version != null ? metadata.version : "UNKNOWN";
+
+            if (!metaMap.containsKey(metadata.modid)) {
+                metaMap.put(metadata.modid, new HashMap<>());
+            }
+            Map<String, ModMetadata> versions = metaMap.get(metadata.modid);
+            versions.put(version, metadata);
+        }
+    }
+
+    public Map<String, Map<String, ModMetadata>> analyzeMods(File file, boolean recursive) {
+        Map<String, Map<String, ModMetadata>> metaMap = new HashMap<>();
 
         if (!file.isDirectory()) {
-            analyzeModFile(metadata, file);
+            appendModMetadata(metaMap, analyzeModFile(file));
         } else {
             for (File f : file.listFiles()) {
-                analyzeModFile(metadata, f);
+                if (f.isDirectory()) {
+                    if (recursive) {
+                        metaMap.putAll(analyzeMods(f, recursive));
+                    }
+                } else {
+                    appendModMetadata(metaMap, analyzeModFile(f));
+                }
             }
         }
 
-        return metadata;
+        return metaMap;
     }
 
-    public Map<String, ModMetadata> analyzeModFile(Map<String, ModMetadata> metadata, File file) {
+    public ModMetadata analyzeModFile(File file) {
+        ModMetadata metadata = new ModMetadata();
+        System.out.println("[*] " + file.toString());
+
         try {
             ZipFile zipFile = new ZipFile(file);
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -166,11 +200,32 @@ public class Modalyzer {
                     appendClassInfo(metadata, zipFile.getInputStream(entry));
                 }
             }
+        } catch (ZipException exception) {
+            return null;
         } catch (IOException exception) {
             exception.printStackTrace();
             return null;
         }
 
-        return metadata;
+        if (metadata.provides != null) {
+            metadata.provides.remove(metadata.modid);
+            if (metadata.provides.size() == 0) {
+                metadata.provides = null;
+            }
+        }
+
+        if (metadata.dependencies != null) {
+            metadata.dependencies.remove(metadata.modid);
+            if (metadata.provides != null) {
+                for (String id : metadata.provides) {
+                    metadata.dependencies.remove(id);
+                }
+            }
+            if (metadata.dependencies.size() == 0) {
+                metadata.dependencies = null;
+            }
+        }
+
+        return metadata.modid != null ? metadata : null;
     }
 }
