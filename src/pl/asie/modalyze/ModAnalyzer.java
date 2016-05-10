@@ -114,9 +114,11 @@ public class ModAnalyzer {
 
         String modName = dep;
         String modVersion = "*";
-        if (dep.contains("@") && dep.split("@").length == 2) {
+        if (dep.contains("@")) {
             modName = dep.split("@")[0];
-            modVersion = dep.split("@")[1];
+            if (dep.split("@").length == 2) {
+                modVersion = dep.split("@")[1];
+            }
         }
 
         modName = modName.trim();
@@ -234,7 +236,8 @@ public class ModAnalyzer {
         }
 
         if (versionHeuristics) {
-            //if (true || metadata.dependencies == null || !metadata.dependencies.containsKey("minecraft")) {
+            if (metadata.dependencies == null || !metadata.dependencies.containsKey("minecraft")
+                    || metadata.dependencies.get("minecraft").equals("*")) {
                 Set<String> versions = new HashSet<>();
                 String version;
                 boolean hasClient = false, hasServer = false;
@@ -264,7 +267,7 @@ public class ModAnalyzer {
                 String side = (!hasSides || hasClient == hasServer) ? "universal" : (hasClient ? "client" : "server");
                 metadata.side = side;
                 metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + version);
-            //}
+            }
         }
 
         if (metadata.modid == null) {
