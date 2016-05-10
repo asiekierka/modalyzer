@@ -1,10 +1,13 @@
 package pl.asie.modalyze;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.objectweb.asm.*;
+import org.objectweb.asm.commons.AdviceAdapter;
 import pl.asie.modalyze.mcp.MCPDataManager;
 import pl.asie.modalyze.mcp.MCPUtils;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
@@ -17,7 +20,7 @@ public class ModAnalyzer {
     private static final List<String> FORGE_MOD_ANNOTATIONS = Arrays.asList("Lcpw/mods/fml/common/Mod;", "Lnet/minecraftforge/fml/common/Mod;");
     private final Set<String> keys = new HashSet<>();
     private final File file;
-    private boolean versionHeuristics;
+    private boolean versionHeuristics, generateHash, storeFilenames, isVerbose;
 
     public class ModHMethodVisitor extends MethodVisitor {
         public ModHMethodVisitor() {
@@ -29,6 +32,19 @@ public class ModAnalyzer {
                                     String desc, boolean itf) {
             keys.add(MCPUtils.getMethodKey(owner + "/" + name, desc));
         }
+    }
+
+    public class ModFieldMethodVisitor extends AdviceAdapter {
+        private final ModMetadata metadata;
+        private final String methodName;
+
+        public ModFieldMethodVisitor(ModMetadata metadata, int access, MethodVisitor mv, String methodName, String description) {
+            super(Opcodes.ASM5, mv, access, methodName, description);
+            this.methodName = methodName;
+            this.metadata = metadata;
+        }
+
+        // TODO
     }
 
     public class ModAnnotationVisitor extends AnnotationVisitor {
@@ -72,6 +88,7 @@ public class ModAnalyzer {
 
     public class ModClassVisitor extends ClassVisitor {
         private final ModMetadata metadata;
+        private String superName;
 
         public ModClassVisitor(ModMetadata metadata) {
             super(Opcodes.ASM5);
@@ -79,13 +96,28 @@ public class ModAnalyzer {
         }
 
         @Override
+        public void visit(int version, int access, String name, String signature,
+                          String superName, String[] interfaces) {
+            this.superName = superName;
+            super.visit(version, access, name, signature, superName, interfaces);
+        }
+
+        @Override
         public MethodVisitor visitMethod(int access, String name, String desc,
                                          String signature, String[] exceptions) {
+            MethodVisitor visitor;
             if (versionHeuristics) {
-                return new ModHMethodVisitor();
+                visitor = new ModHMethodVisitor();
             } else {
-                return super.visitMethod(access, name, desc, signature, exceptions);
+                visitor = super.visitMethod(access, name, desc, signature, exceptions);
             }
+
+            /* if ((name.equals("getName") || name.equals("getVersion")) && superName.contains("BaseMod")) {
+                return new ModFieldMethodVisitor(metadata, access, visitor, name, desc);
+            } else {
+                return visitor;
+            } */
+            return visitor;
         }
 
         @Override
@@ -102,8 +134,23 @@ public class ModAnalyzer {
         this.file = file;
     }
 
+    public ModAnalyzer setGenerateHash(boolean gh) {
+        generateHash = gh;
+        return this;
+    }
+
     public ModAnalyzer setVersionHeuristics(boolean v) {
         versionHeuristics = v;
+        return this;
+    }
+
+    public ModAnalyzer setStoreFilenames(boolean sf) {
+        storeFilenames = sf;
+        return this;
+    }
+
+    public ModAnalyzer setIsVerbose(boolean iv) {
+        isVerbose = iv;
         return this;
     }
 
@@ -149,7 +196,7 @@ public class ModAnalyzer {
         McmodInfo info = McmodInfo.get(stream);
         if (info != null && info.modList != null) {
             for (McmodInfo.Entry entry : info.modList) {
-                if (entry.modid == null) {
+                if (entry.modid == null || "examplemod".equals(entry.modid) /* You have no idea how many mods do this */) {
                     continue;
                 }
 
@@ -196,7 +243,9 @@ public class ModAnalyzer {
 
     public ModMetadata analyze() {
         ModMetadata metadata = new ModMetadata();
-        System.out.println("[*] " + file.toString());
+        if (isVerbose) {
+            System.err.println("[*] " + file.toString());
+        }
 
         try {
             ZipFile zipFile = new ZipFile(file);
@@ -235,8 +284,18 @@ public class ModAnalyzer {
             }
         }
 
+        if (metadata.side == null) {
+            if (metadata.dependencies != null && metadata.dependencies.containsKey("minecraft")
+                    && !metadata.dependencies.get("minecraft").equals("*")) {
+                boolean hasSides = MCP.hasSides(metadata.dependencies.get("minecraft"));
+                if (!hasSides) {
+                    metadata.side = "universal";
+                }
+            }
+        }
+
         if (versionHeuristics) {
-            if (metadata.dependencies == null || !metadata.dependencies.containsKey("minecraft")
+            if (metadata.side == null || metadata.dependencies == null || !metadata.dependencies.containsKey("minecraft")
                     || metadata.dependencies.get("minecraft").equals("*")) {
                 Set<String> versions = new HashSet<>();
                 String version;
@@ -270,8 +329,16 @@ public class ModAnalyzer {
             }
         }
 
-        if (metadata.modid == null) {
-            metadata.modid = file.getName();
+        if (generateHash) {
+            try {
+                metadata.sha256 = DigestUtils.sha256Hex(new FileInputStream(file));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        if (storeFilenames) {
+            metadata.filename = file.getName();
         }
 
         return metadata;
