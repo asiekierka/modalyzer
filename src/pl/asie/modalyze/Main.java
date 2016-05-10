@@ -4,6 +4,7 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import pl.asie.modalyze.mcp.MCPDataManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,6 +26,9 @@ public class Main {
 
         @Parameter(names = {"-U", "--unknown"}, description = "List unknown mod IDs and versions")
         private boolean unknown;
+
+        @Parameter(names = {"-m", "--mcp"}, description = "Location to MCP (./mcp/ by default)")
+        private String mcpPath;
 
         @Parameter(description = "Input files and directories")
         private List<String> files = new ArrayList<>();
@@ -57,9 +61,20 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         JCommander jCommander = new JCommander(parameters, args);
+
         if (parameters.help) {
             jCommander.usage();
             System.exit(0);
+        }
+
+        if (parameters.mcpPath != null && parameters.mcpPath.length() > 0) {
+            File f = new File(parameters.mcpPath);
+            if (f.isDirectory()) {
+                MCPDataManager.MCP_DIR = f;
+            } else {
+                System.err.println("Not a directory: " + f.getAbsolutePath());
+                System.exit(0);
+            }
         }
 
         boolean isDir = false;

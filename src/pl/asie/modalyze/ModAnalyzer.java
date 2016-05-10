@@ -300,32 +300,35 @@ public class ModAnalyzer {
                 Set<String> versions = new HashSet<>();
                 String version;
                 boolean hasClient = false, hasServer = false;
-                for (String s : MCP.getVersionsForKeySet(keys)) {
-                    if (s.endsWith("-client")) {
-                        hasClient = true;
-                    } else if (s.endsWith("-server")) {
-                        hasServer = true;
+                Collection<String> heuristicVersions = MCP.getVersionsForKeySet(keys);
+                if (heuristicVersions != null) {
+                    for (String s : heuristicVersions) {
+                        if (s.endsWith("-client")) {
+                            hasClient = true;
+                        } else if (s.endsWith("-server")) {
+                            hasServer = true;
+                        }
+                        versions.add(s.split("-")[0]);
                     }
-                    versions.add(s.split("-")[0]);
-                }
 
-                if (versions.size() == 1) {
-                    version = (String) versions.toArray()[0];
-                } else {
-                    version = Arrays.toString(versions.toArray(new String[versions.size()]));
-                }
-
-                boolean hasSides = false;
-                for (String s : versions) {
-                    if (MCP.hasSides(s)) {
-                        hasSides = true;
-                        break;
+                    if (versions.size() == 1) {
+                        version = (String) versions.toArray()[0];
+                    } else {
+                        version = Arrays.toString(versions.toArray(new String[versions.size()]));
                     }
-                }
 
-                String side = (!hasSides || hasClient == hasServer) ? "universal" : (hasClient ? "client" : "server");
-                metadata.side = side;
-                metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + version);
+                    boolean hasSides = false;
+                    for (String s : versions) {
+                        if (MCP.hasSides(s)) {
+                            hasSides = true;
+                            break;
+                        }
+                    }
+
+                    String side = (!hasSides || hasClient == hasServer) ? "universal" : (hasClient ? "client" : "server");
+                    metadata.side = side;
+                    metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + version);
+                }
             }
         }
 

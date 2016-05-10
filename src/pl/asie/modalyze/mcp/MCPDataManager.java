@@ -21,7 +21,7 @@ public class MCPDataManager {
     }
 
     private static final Map<String, MCPVersion> MCP_VERSION_MAP = new HashMap<>();
-    private static final File MCP_DIR = new File("./mcp/");
+    public static File MCP_DIR = new File("./mcp/");
     private final Map<String, Set<String>> MAPPINGS = new HashMap<>();
 
     public MCPDataManager() {
@@ -82,7 +82,7 @@ public class MCPDataManager {
             }
         }
 
-        return versionSet;
+        return versionSet.size() < MCP_VERSION_MAP.size() ? versionSet : null;
     }
 
     public Set<String> getMappings(String version, boolean server) {
