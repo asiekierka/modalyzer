@@ -15,8 +15,14 @@ public class Main {
         @Parameter(names = {"-H", "--hash"}, description = "Generate SHA256 hashes of mods")
         private boolean hash = false;
 
-        @Parameter(names = {"-F", "--filename"}, description = "Store and index by mod filenames")
-        private boolean filename = false;
+        @Parameter(names = {"-I", "--sort-id"}, description = "Index by mod IDs")
+        private boolean sortId = false;
+
+        @Parameter(names = {"-F", "--sort-filename"}, description = "Index by mod filenames")
+        private boolean sortFilename = false;
+
+        @Parameter(names = {"-f", "--filename"}, description = "Store mod filenames (implied by -F)")
+        private boolean filenames = false;
 
         @Parameter(names = {"-h", "--help"}, description = "Print usage", help = true)
         private boolean help;
@@ -41,7 +47,7 @@ public class Main {
         return new ModAnalyzer(file)
                 .setVersionHeuristics(true)
                 .setGenerateHash(parameters.hash)
-                .setStoreFilenames(parameters.filename)
+                .setStoreFilenames(parameters.filenames)
                 .setIsVerbose(parameters.verbose);
     }
 
@@ -67,6 +73,10 @@ public class Main {
             System.exit(0);
         }
 
+        if (parameters.sortFilename) {
+            parameters.filenames = true;
+        }
+
         if (parameters.mcpPath != null && parameters.mcpPath.length() > 0) {
             File f = new File(parameters.mcpPath);
             if (f.isDirectory()) {
@@ -89,13 +99,51 @@ public class Main {
         Gson gson = gsonBuilder.create();
 
         if (isDir || parameters.files.size() > 1 || modMetadata.size() > 1) {
-            if (parameters.filename) {
+            if (parameters.sortFilename) {
                 Map<String, ModMetadata> metadataMap = new HashMap<>();
                 for (ModMetadata m : modMetadata) {
                     if (m == null) {
                         continue;
                     }
                     metadataMap.put(m.filename, m);
+                }
+                System.out.println(gson.toJson(metadataMap));
+            } else if (parameters.sortId) {
+                Map<String, List<ModMetadata>> metadataMap = new HashMap<>();
+                for (ModMetadata m : modMetadata) {
+                    if (m == null) {
+                        continue;
+                    }
+                    String key = m.modid;
+                    if (key == null && parameters.unknown) {
+                        int i = 0;
+                        while (metadataMap.containsKey("UNKNOWN-" + i)) {
+                            i++;
+                        }
+                        key = "UNKNOWN-" + i;
+                    }
+                    if (key != null) {
+                        List<ModMetadata> mods = metadataMap.get(key);
+                        if (mods == null) {
+                            mods = new ArrayList<>();
+                            metadataMap.put(key, mods);
+                        }
+                        mods.add(m);
+                    }
+                }
+                for (List<ModMetadata> list : metadataMap.values()) {
+                    Collections.sort(list, new Comparator<ModMetadata>() {
+                        @Override
+                        public int compare(ModMetadata m1, ModMetadata m2) {
+                            if (m1.version == null && m2.version == null) {
+                                return 0;
+                            } else if (m1.version != null && m2.version != null) {
+                                return m1.version.compareTo(m2.version);
+                            } else {
+                                return m1.version != null ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+                            }
+                        }
+                    });
                 }
                 System.out.println(gson.toJson(metadataMap));
             } else {
