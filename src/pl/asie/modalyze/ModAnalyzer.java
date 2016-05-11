@@ -2,7 +2,6 @@ package pl.asie.modalyze;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.objectweb.asm.*;
-import org.objectweb.asm.commons.AdviceAdapter;
 import pl.asie.modalyze.mcp.MCPDataManager;
 import pl.asie.modalyze.mcp.MCPUtils;
 
@@ -17,7 +16,11 @@ import java.util.zip.ZipFile;
 
 public class ModAnalyzer {
     public static final MCPDataManager MCP = new MCPDataManager();
-    private static final List<String> FORGE_MOD_ANNOTATIONS = Arrays.asList("Lcpw/mods/fml/common/Mod;", "Lnet/minecraftforge/fml/common/Mod;");
+    private static final List<String> FORGE_MOD_ANNOTATIONS = Arrays.asList(
+            "Lfml/Mod;", // very early 1.2.5 commits
+            "Lcpw/mods/fml/common/Mod;", // 1.2.5-1.7.10
+            "Lnet/minecraftforge/fml/common/Mod;" // 1.8+
+    );
     private final Set<String> keys = new HashSet<>();
     private final File file;
     private boolean versionHeuristics, generateHash, storeFilenames, isVerbose;
@@ -34,53 +37,63 @@ public class ModAnalyzer {
         }
     }
 
-    public class ModFieldMethodVisitor extends AdviceAdapter {
-        private final ModMetadata metadata;
-        private final String methodName;
-
-        public ModFieldMethodVisitor(ModMetadata metadata, int access, MethodVisitor mv, String methodName, String description) {
-            super(Opcodes.ASM5, mv, access, methodName, description);
-            this.methodName = methodName;
-            this.metadata = metadata;
-        }
-
-        // TODO
-    }
-
     public class ModAnnotationVisitor extends AnnotationVisitor {
         private final ModMetadata metadata;
         private Map<String, Object> data = new HashMap<>();
 
-        public ModAnnotationVisitor(ModMetadata metadata) {
-            super(Opcodes.ASM5);
+        public ModAnnotationVisitor(ModMetadata metadata, AnnotationVisitor av) {
+            super(Opcodes.ASM5, av);
             this.metadata = metadata;
         }
 
         @Override
         public void visit(String name, Object value) {
+            super.visit(name, value);
             data.put(name, value);
         }
 
         @Override
         public void visitEnum(String name, String desc, String value) {
+            super.visitEnum(name, desc, value);
             data.put(name, value);
         }
 
         @Override
         public void visitEnd() {
+            super.visitEnd();
             if (data.containsKey("modid")) {
                 metadata.provides = StringUtils.append(metadata.provides, (String) data.get("modid"));
             }
+
             if (data.containsKey("version")) {
                 metadata.version = StringUtils.select(metadata.version, (String) data.get("version"));
             }
-            if (data.containsKey("dependencies")) {
-                List<String> dependencies = Arrays.asList(((String) data.get("dependencies")).split(";"));
+
+            String dependencyStr = data.containsKey("dependencies") ? ((String) data.get("dependencies"))
+                    : (data.containsKey("dependsOn") ? ((String) data.get("dependsOn")) : null);
+
+            if (dependencyStr != null) {
+                List<String> dependencies = Arrays.asList(dependencyStr.split(";"));
                 for (String s : dependencies) {
                     String[] dep = s.split(":");
-                    if (dep.length == 2 && dep[0].startsWith("required")) {
+                    if (dep.length == 2 && dep[0].startsWith("require")) {
+                        // ModLoader used "require-" instead of "required-"
                         metadata.dependencies = addDependency(metadata.dependencies, dep[1]);
                     }
+                }
+            }
+
+            if (data.containsKey("acceptedMinecraftVersions")) {
+                metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + data.get("acceptedMinecraftVersions"));
+            }
+
+            if (data.containsKey("clientSideOnly")) {
+                if (((boolean) data.get("clientSideOnly")) == true) {
+                    metadata.side = "client";
+                }
+            } else if (data.containsKey("serverSideOnly")) {
+                if (((boolean) data.get("serverSideOnly")) == true) {
+                    metadata.side = "server";
                 }
             }
         }
@@ -88,7 +101,8 @@ public class ModAnalyzer {
 
     public class ModClassVisitor extends ClassVisitor {
         private final ModMetadata metadata;
-        private String superName;
+        private String superName, methodName;
+        private boolean useMethodNameAsModName;
 
         public ModClassVisitor(ModMetadata metadata) {
             super(Opcodes.ASM5);
@@ -98,34 +112,47 @@ public class ModAnalyzer {
         @Override
         public void visit(int version, int access, String name, String signature,
                           String superName, String[] interfaces) {
-            this.superName = superName;
             super.visit(version, access, name, signature, superName, interfaces);
+
+            this.superName = superName;
+            this.methodName = name;
+            if (superName.endsWith("BaseMod") || superName.endsWith("BaseModMp")) {
+                useMethodNameAsModName = true;
+            }
+        }
+
+        @Override
+        public void visitEnd() {
+            if (useMethodNameAsModName) {
+                String[] data = methodName.split("/");
+                metadata.modid = metadata.name = StringUtils.select(metadata.name, data[data.length - 1]);
+            }
         }
 
         @Override
         public MethodVisitor visitMethod(int access, String name, String desc,
                                          String signature, String[] exceptions) {
+            if (useMethodNameAsModName && name.equals("getName")) {
+                useMethodNameAsModName = false;
+            }
+
             MethodVisitor visitor;
             if (versionHeuristics) {
                 visitor = new ModHMethodVisitor();
             } else {
                 visitor = super.visitMethod(access, name, desc, signature, exceptions);
             }
-
-            /* if ((name.equals("getName") || name.equals("getVersion")) && superName.contains("BaseMod")) {
-                return new ModFieldMethodVisitor(metadata, access, visitor, name, desc);
-            } else {
-                return visitor;
-            } */
             return visitor;
         }
 
         @Override
         public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
+            AnnotationVisitor visitor = super.visitAnnotation(desc, visible);
+
             if (FORGE_MOD_ANNOTATIONS.contains(desc)) {
-                return new ModAnnotationVisitor(metadata);
+                return new ModAnnotationVisitor(metadata, visitor);
             } else {
-                return super.visitAnnotation(desc, visible);
+                return visitor;
             }
         }
     }
@@ -315,6 +342,8 @@ public class ModAnalyzer {
                         version = (String) versions.toArray()[0];
                     } else {
                         version = Arrays.toString(versions.toArray(new String[versions.size()]));
+                        version = version.replace('[', '{');
+                        version = version.replace(']', '}');
                     }
 
                     boolean hasSides = false;
