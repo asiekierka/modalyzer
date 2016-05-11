@@ -101,8 +101,8 @@ public class ModAnalyzer {
 
     public class ModClassVisitor extends ClassVisitor {
         private final ModMetadata metadata;
-        private String superName, methodName;
-        private boolean useMethodNameAsModName;
+        private String superName, className;
+        private boolean isBaseMod, useClassNameAsModName;
 
         public ModClassVisitor(ModMetadata metadata) {
             super(Opcodes.ASM5);
@@ -115,16 +115,17 @@ public class ModAnalyzer {
             super.visit(version, access, name, signature, superName, interfaces);
 
             this.superName = superName;
-            this.methodName = name;
-            if (superName.endsWith("BaseMod") || superName.endsWith("BaseModMp")) {
-                useMethodNameAsModName = true;
+            this.className = name;
+            if (superName.endsWith("BaseMod") || superName.endsWith("BaseModMp") || superName.equals("forge/NetworkMod")) {
+                isBaseMod = true;
+                useClassNameAsModName = true;
             }
         }
 
         @Override
         public void visitEnd() {
-            if (useMethodNameAsModName) {
-                String[] data = methodName.split("/");
+            if (useClassNameAsModName) {
+                String[] data = className.split("/");
                 metadata.modid = metadata.name = StringUtils.select(metadata.name, data[data.length - 1]);
             }
         }
@@ -132,8 +133,9 @@ public class ModAnalyzer {
         @Override
         public MethodVisitor visitMethod(int access, String name, String desc,
                                          String signature, String[] exceptions) {
-            if (useMethodNameAsModName && name.equals("getName")) {
-                useMethodNameAsModName = false;
+            if (useClassNameAsModName && name.equals("getName")) {
+                // getName() is overridden so it is not reliable
+                useClassNameAsModName = false;
             }
 
             MethodVisitor visitor;

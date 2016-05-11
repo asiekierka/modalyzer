@@ -92,12 +92,19 @@ public class Main {
             if (parameters.filename) {
                 Map<String, ModMetadata> metadataMap = new HashMap<>();
                 for (ModMetadata m : modMetadata) {
+                    if (m == null) {
+                        continue;
+                    }
                     metadataMap.put(m.filename, m);
                 }
                 System.out.println(gson.toJson(metadataMap));
             } else {
                 Map<String, Map<String, ModMetadata>> metadataMap = new HashMap<>();
                 for (ModMetadata m : modMetadata) {
+                    if (m == null) {
+                        continue;
+                    }
+
                     String key;
                     if (m.modid != null) {
                         key = m.modid;
