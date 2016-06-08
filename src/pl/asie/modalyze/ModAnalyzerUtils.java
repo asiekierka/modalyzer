@@ -9,6 +9,11 @@ public final class ModAnalyzerUtils {
 
     }
 
+    public static boolean isValidMcVersion(String version) {
+        // Check for @VERSION@, ${mcversion}, etc.
+        return version.indexOf("ver") < 0 && version.indexOf("VER") < 0;
+    }
+
     private static void appendModMetadata(Map<String, Map<String, ModMetadata>> metaMap, ModMetadata metadata, File file, boolean asFilenames) {
         if (metadata != null) {
             String key = asFilenames ? file.getName() : metadata.modid;

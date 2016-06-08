@@ -43,7 +43,7 @@ public class Main {
     private static final Set<ModMetadata> modMetadata = new HashSet<>();
     private static Parameters parameters = new Parameters();
 
-    private static ModAnalyzer analyzer(File file) {
+    public static ModAnalyzer analyzer(File file) {
         return new ModAnalyzer(file)
                 .setVersionHeuristics(true)
                 .setGenerateHash(parameters.hash)

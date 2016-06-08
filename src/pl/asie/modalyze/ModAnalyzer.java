@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 public class ModAnalyzer {
     public static final MCPDataManager MCP = new MCPDataManager();
@@ -61,6 +62,8 @@ public class ModAnalyzer {
         @Override
         public void visitEnd() {
             super.visitEnd();
+            metadata.valid = true;
+
             if (data.containsKey("modid")) {
                 metadata.provides = StringUtils.append(metadata.provides, (String) data.get("modid"));
             }
@@ -83,7 +86,8 @@ public class ModAnalyzer {
                 }
             }
 
-            if (data.containsKey("acceptedMinecraftVersions")) {
+            if (data.containsKey("acceptedMinecraftVersions")
+                    && ModAnalyzerUtils.isValidMcVersion((String) data.get("acceptedMinecraftVersions"))) {
                 metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + data.get("acceptedMinecraftVersions"));
             }
 
@@ -119,6 +123,7 @@ public class ModAnalyzer {
             if (superName.endsWith("BaseMod") || superName.endsWith("BaseModMp") || superName.equals("forge/NetworkMod")) {
                 isBaseMod = true;
                 useClassNameAsModName = true;
+                metadata.valid = true;
             }
         }
 
@@ -235,12 +240,13 @@ public class ModAnalyzer {
                     continue;
                 }
 
+                metadata.valid = true;
                 metadata.provides = StringUtils.append(metadata.provides, entry.modid);
                 metadata.name = StringUtils.selectLonger(entry.name, metadata.name);
                 metadata.description = StringUtils.select(entry.description, metadata.description);
                 metadata.version = StringUtils.select(entry.version, metadata.version);
                 metadata.homepage = StringUtils.select(entry.url, metadata.homepage);
-                if (entry.mcversion != null) {
+                if (entry.mcversion != null && ModAnalyzerUtils.isValidMcVersion(entry.mcversion)) {
                     metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + entry.mcversion);
                 }
                 if (entry.authorList != null) {
@@ -271,20 +277,33 @@ public class ModAnalyzer {
     }
 
     public ModMetadata analyze() {
+        try {
+            return analyze(new ZipInputStream(new FileInputStream(file)));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public ModMetadata analyze(ZipInputStream stream) {
+        List<ModMetadata> recursiveMods = new ArrayList<>();
         ModMetadata metadata = new ModMetadata();
         if (isVerbose) {
             System.err.println("[*] " + file.toString());
         }
 
         try {
-            ZipFile zipFile = new ZipFile(file);
-            Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry entry = entries.nextElement();
+            ZipEntry entry;
+            while ((entry = stream.getNextEntry()) != null) {
                 if (entry.getName().equals("mcmod.info")) {
-                    appendMcmodInfo(metadata, zipFile.getInputStream(entry));
+                    appendMcmodInfo(metadata, stream);
                 } else if (entry.getName().endsWith(".class")) {
-                    appendClassInfo(metadata, zipFile.getInputStream(entry));
+                    appendClassInfo(metadata, stream);
+                } else if (entry.getName().endsWith(".zip") || entry.getName().endsWith(".jar")) {
+                    ModMetadata meta = Main.analyzer(null).analyze(new ZipInputStream(stream));
+                    if (meta != null && meta.valid) {
+                        recursiveMods.add(meta);
+                    }
                 }
             }
         } catch (ZipException exception) {
@@ -294,10 +313,26 @@ public class ModAnalyzer {
             return null;
         }
 
+        if (!metadata.valid) {
+            if (recursiveMods.size() == 1) {
+                metadata = recursiveMods.get(0);
+            } else if (recursiveMods.size() == 2
+                    && recursiveMods.get(0).modid != null
+                    && recursiveMods.get(1).modid != null
+                    && recursiveMods.get(0).modid.equals(recursiveMods.get(1).modid)
+                    && ((recursiveMods.get(0).side.equals("client") && recursiveMods.get(1).side.equals("server"))
+                    || (recursiveMods.get(1).side.equals("client") && recursiveMods.get(0).side.equals("server")))) {
+                metadata = recursiveMods.get(0);
+                metadata.side = "universal";
+            }
+        }
+
         if (metadata.provides != null) {
             metadata.provides.remove(metadata.modid);
             if (metadata.provides.size() == 0) {
                 metadata.provides = null;
+            } else {
+                metadata.valid = true;
             }
         }
 
@@ -310,6 +345,8 @@ public class ModAnalyzer {
             }
             if (metadata.dependencies.size() == 0) {
                 metadata.dependencies = null;
+            } else {
+                metadata.valid = true;
             }
         }
 
@@ -357,6 +394,7 @@ public class ModAnalyzer {
                     }
 
                     String side = (!hasSides || hasClient == hasServer) ? "universal" : (hasClient ? "client" : "server");
+                    metadata.valid = true;
                     metadata.side = side;
                     metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + version);
                 }
