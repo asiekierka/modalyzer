@@ -1,0 +1,38 @@
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'application'
+apply plugin: 'maven'
+
+repositories {
+    mavenCentral()
+}
+
+group = 'pl.asie'
+archivesBaseName = 'modalyze'
+mainClassName = 'pl.asie.modalyze.Main'
+version = "0.0.1"
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src'
+        }
+    }
+}
+
+jar {
+    from { [configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }, 'src'] }
+    exclude '**/*.java'
+
+    manifest {
+        attributes 'Main-Class': mainClassName
+    }
+}
+
+dependencies {
+    compile 'org.ow2.asm:asm-all:5.1'
+    compile 'com.google.code.gson:gson:2.6.2'
+    compile 'commons-io:commons-io:2.5'
+    compile 'commons-codec:commons-codec:1.10'
+    compile 'com.beust:jcommander:1.48'
+}
