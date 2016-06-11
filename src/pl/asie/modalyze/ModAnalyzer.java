@@ -5,14 +5,15 @@ import org.objectweb.asm.*;
 import pl.asie.modalyze.mcp.MCPDataManager;
 import pl.asie.modalyze.mcp.MCPUtils;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 public class ModAnalyzer {
@@ -65,6 +66,7 @@ public class ModAnalyzer {
             metadata.valid = true;
 
             if (data.containsKey("modid")) {
+                metadata.modid = (String) data.get("modid"); // always more accurate
                 metadata.provides = StringUtils.append(metadata.provides, (String) data.get("modid"));
             }
 
@@ -226,6 +228,16 @@ public class ModAnalyzer {
         return metadata;
     }
 
+    private void appendManifest(ModMetadata metadata, InputStream stream) throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+        String line;
+
+        while ((line = reader.readLine()) != null) {
+            if (line.startsWith("FMLCorePlugin:")) {
+                metadata.hasCoremod = true;
+            }
+        }
+    }
     private void appendMcmodInfo(ModMetadata metadata, InputStream stream) throws IOException {
         McmodInfo info = McmodInfo.get(stream);
         if (info != null && info.modList != null) {
@@ -304,6 +316,8 @@ public class ModAnalyzer {
                     if (meta != null && meta.valid) {
                         recursiveMods.add(meta);
                     }
+                } else if (entry.getName().equals("META-INF/MANIFEST.MF")) {
+                    appendManifest(metadata, stream);
                 }
             }
         } catch (ZipException exception) {

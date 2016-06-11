@@ -59,6 +59,7 @@ public class McmodInfo {
                     info = null;
                 }
             } catch (Exception ee) {
+                ee.printStackTrace();
                 info = null;
             }
         } catch (Exception e) {

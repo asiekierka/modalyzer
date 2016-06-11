@@ -11,6 +11,7 @@ public class ModMetadata {
     public String filename, sha256;
     public List<String> authors;
     public Map<String, String> dependencies;
+    public boolean hasCoremod;
 
     public transient boolean valid;
 }
