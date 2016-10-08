@@ -3,6 +3,17 @@ apply plugin: 'idea'
 apply plugin: 'application'
 apply plugin: 'maven'
 
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+    dependencies {
+        classpath "gradle.plugin.net.minecrell:licenser:0.2.1"
+    }
+}
+
 repositories {
     mavenCentral()
 }
@@ -27,6 +38,13 @@ jar {
     manifest {
         attributes 'Main-Class': mainClassName
     }
+}
+
+apply plugin: net.minecrell.gradle.licenser.Licenser
+
+license {
+    header file('HEADER')
+    include '**/*.java'
 }
 
 dependencies {
