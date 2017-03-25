@@ -41,6 +41,7 @@ public class ModAnalyzer {
     );
     private final Set<String> keys = new HashSet<>();
     private final File file;
+    private String forgeModAnnotation;
     private boolean versionHeuristics, generateHash, storeFilenames, isVerbose;
 
     public class ModHMethodVisitor extends MethodVisitor {
@@ -161,6 +162,11 @@ public class ModAnalyzer {
                 useClassNameAsModName = false;
             }
 
+            // potential override
+            if (name.startsWith("func_")) {
+                keys.add(MCPUtils.getMethodKey(className + "/" + name, desc));
+            }
+
             MethodVisitor visitor;
             if (versionHeuristics) {
                 visitor = new ModHMethodVisitor();
@@ -175,6 +181,7 @@ public class ModAnalyzer {
             AnnotationVisitor visitor = super.visitAnnotation(desc, visible);
 
             if (FORGE_MOD_ANNOTATIONS.contains(desc)) {
+                forgeModAnnotation = desc;
                 return new ModAnnotationVisitor(metadata, visitor);
             } else {
                 return visitor;
@@ -399,6 +406,15 @@ public class ModAnalyzer {
                 Collection<String> heuristicVersions = MCP.getVersionsForKeySet(keys);
                 if (heuristicVersions != null) {
                     for (String s : heuristicVersions) {
+                        if (forgeModAnnotation != null) {
+                            boolean isCpwVer = s.startsWith("1.2") || s.startsWith("1.3") || s.startsWith("1.4") || s.startsWith("1.5") || s.startsWith("1.6") || s.startsWith("1.7");
+                            if (
+                                    (!isCpwVer && !forgeModAnnotation.contains("net.minecraftforge.fml"))
+                                ||  (isCpwVer && forgeModAnnotation.contains("net.minecraftforge.fml"))) {
+                                continue;
+                            }
+                        }
+
                         if (s.endsWith("-client")) {
                             hasClient = true;
                         } else if (s.endsWith("-server")) {

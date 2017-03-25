@@ -22,10 +22,20 @@ public final class MCPUtils {
     }
 
     public static String getFieldKey(String name) {
-        return "F:" + name;
+        String basename = name.substring(name.lastIndexOf("/")+1);
+        if (basename.startsWith("func_")) {
+            return "F:" + basename;
+        } else {
+            return "F:" + name;
+        }
     }
 
     public static String getMethodKey(String name, String sig) {
-        return "M:" + name + ":" + sig;
+        String basename = name.substring(name.lastIndexOf("/")+1);
+        if (basename.startsWith("func_")) {
+            return "M:" + basename + ":" + sig;
+        } else {
+            return "M:" + name + ":" + sig;
+        }
     }
 }
