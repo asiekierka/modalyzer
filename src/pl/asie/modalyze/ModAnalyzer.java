@@ -41,6 +41,7 @@ public class ModAnalyzer {
     );
     private final Set<String> keys = new HashSet<>();
     private final File file;
+    private List<String> versionsFound = new ArrayList<>();
     private String forgeModAnnotation;
     private boolean versionHeuristics, generateHash, storeFilenames, isVerbose;
 
@@ -88,7 +89,7 @@ public class ModAnalyzer {
             }
 
             if (data.containsKey("version")) {
-                metadata.version = StringUtils.select(metadata.version, (String) data.get("version"));
+                versionsFound.add((String) data.get("version"));
             }
 
             String dependencyStr = data.containsKey("dependencies") ? ((String) data.get("dependencies"))
@@ -279,7 +280,7 @@ public class ModAnalyzer {
                 metadata.provides = StringUtils.append(metadata.provides, entry.modid);
                 metadata.name = StringUtils.selectLonger(entry.name, metadata.name);
                 metadata.description = StringUtils.select(entry.description, metadata.description);
-                metadata.version = StringUtils.select(entry.version, metadata.version);
+                versionsFound.add(entry.version);
                 metadata.homepage = StringUtils.select(entry.url, metadata.homepage);
                 if (entry.mcversion != null && ModAnalyzerUtils.isValidMcVersion(entry.mcversion)) {
                     metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + entry.mcversion);
@@ -445,6 +446,40 @@ public class ModAnalyzer {
                     metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + version);
                 }
             }
+        }
+
+        if (versionsFound.size() > 1) {
+            String filename = file.getName();
+            List<String> vfFilename = new ArrayList<>();
+            for (String s : versionsFound) {
+                if (filename.contains(s)) {
+                    vfFilename.add(s);
+                }
+            }
+
+            if (vfFilename.size() == 1) {
+                metadata.version = vfFilename.get(0);
+            } else {
+                String longest = "";
+                int longestCount = 1;
+                for (String s : versionsFound) {
+                    if (s.length() > longest.length()) {
+                        longest = s;
+                        longestCount = 1;
+                    } else if (s.length() == longest.length()) {
+                        longestCount++;
+                    }
+                }
+
+                if (longestCount == 1) {
+                    metadata.version = longest;
+                } else {
+                    Collections.sort(versionsFound);
+                    metadata.version = versionsFound.get(versionsFound.size() - 1);
+                }
+            }
+        } else if (versionsFound.size() == 1) {
+            metadata.version = versionsFound.get(0);
         }
 
         if (generateHash) {
