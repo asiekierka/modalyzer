@@ -10,6 +10,6 @@ Currently, it supports the following methods of gathering metadata:
 * BaseMod class name to get mod ID/name (unless getName() is overridden in the class)
 * (Optional) Generating SHA256 hashes of mods
 
-For help, type "java -jar Modalyzer.jar help".
+For help, type "java -jar Modalyzer.jar --help".
 
 Licensed under Apache 2.0.
