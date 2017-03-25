@@ -89,7 +89,10 @@ public class ModAnalyzer {
             }
 
             if (data.containsKey("version")) {
-                versionsFound.add((String) data.get("version"));
+                String v = (String) data.get("version");
+                if (v != null && v.length() > 0) {
+                    versionsFound.add(v);
+                }
             }
 
             String dependencyStr = data.containsKey("dependencies") ? ((String) data.get("dependencies"))
@@ -280,7 +283,9 @@ public class ModAnalyzer {
                 metadata.provides = StringUtils.append(metadata.provides, entry.modid);
                 metadata.name = StringUtils.selectLonger(entry.name, metadata.name);
                 metadata.description = StringUtils.select(entry.description, metadata.description);
-                versionsFound.add(entry.version);
+                if (entry.version != null && entry.version.length() > 0) {
+                    versionsFound.add(entry.version);
+                }
                 metadata.homepage = StringUtils.select(entry.url, metadata.homepage);
                 if (entry.mcversion != null && ModAnalyzerUtils.isValidMcVersion(entry.mcversion)) {
                     metadata.dependencies = addDependency(metadata.dependencies, "minecraft@" + entry.mcversion);
