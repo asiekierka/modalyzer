@@ -52,6 +52,7 @@ public class Main {
         @Parameter(names = {"-m", "--mcp"}, description = "Location to MCP (./mcp/ by default)")
         private String mcpPath;
 
+        @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
         @Parameter(description = "Input files and directories")
         private List<String> files = new ArrayList<>();
     }
@@ -81,8 +82,9 @@ public class Main {
         }
     }
 
-    public static void main(String[] args) throws IOException {
-        JCommander jCommander = new JCommander(parameters, args);
+    public static void main(String[] args) {
+        JCommander jCommander = new JCommander(parameters);
+        jCommander.parse(args);
 
         if (parameters.help) {
             jCommander.usage();
@@ -148,16 +150,13 @@ public class Main {
                     }
                 }
                 for (List<ModMetadata> list : metadataMap.values()) {
-                    Collections.sort(list, new Comparator<ModMetadata>() {
-                        @Override
-                        public int compare(ModMetadata m1, ModMetadata m2) {
-                            if (m1.version == null && m2.version == null) {
-                                return 0;
-                            } else if (m1.version != null && m2.version != null) {
-                                return m1.version.compareTo(m2.version);
-                            } else {
-                                return m1.version != null ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-                            }
+                    list.sort((m1, m2) -> {
+                        if (m1.version == null && m2.version == null) {
+                            return 0;
+                        } else if (m1.version != null && m2.version != null) {
+                            return m1.version.compareTo(m2.version);
+                        } else {
+                            return m1.version != null ? Integer.MAX_VALUE : Integer.MIN_VALUE;
                         }
                     });
                 }

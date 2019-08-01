@@ -18,6 +18,7 @@ package pl.asie.modalyze;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class ModAnalyzerUtils {
@@ -27,7 +28,7 @@ public final class ModAnalyzerUtils {
 
     public static boolean isValidMcVersion(String version) {
         // Check for @VERSION@, ${mcversion}, etc.
-        return version.indexOf("ver") < 0 && version.indexOf("VER") < 0;
+        return !version.toLowerCase(Locale.ROOT).contains("ver");
     }
 
     private static void appendModMetadata(Map<String, Map<String, ModMetadata>> metaMap, ModMetadata metadata, File file, boolean asFilenames) {

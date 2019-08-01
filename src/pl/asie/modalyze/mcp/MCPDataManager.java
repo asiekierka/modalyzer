@@ -296,5 +296,6 @@ public class MCPDataManager {
         MCP_VERSION_MAP.put("1.9.4", new MCPVersion("mcp928.zip", false));
         MCP_VERSION_MAP.put("1.10", new MCPVersion("mcp931.zip", false));
         MCP_VERSION_MAP.put("1.11.2", new MCPVersion("mcp937.zip", false));
+        MCP_VERSION_MAP.put("1.12", new MCPVersion("mcp940.zip", false));
     }
 }

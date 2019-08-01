@@ -99,7 +99,7 @@ public class ModAnalyzer {
                     : (data.containsKey("dependsOn") ? ((String) data.get("dependsOn")) : null);
 
             if (dependencyStr != null) {
-                List<String> dependencies = Arrays.asList(dependencyStr.split(";"));
+                String[] dependencies = dependencyStr.split(";");
                 for (String s : dependencies) {
                     String[] dep = s.split(":");
                     if (dep.length == 2 && dep[0].startsWith("require")) {
@@ -430,9 +430,9 @@ public class ModAnalyzer {
                     }
 
                     if (versions.size() == 1) {
-                        version = (String) versions.toArray()[0];
+                        version = versions.iterator().next();
                     } else {
-                        version = Arrays.toString(versions.toArray(new String[versions.size()]));
+                        version = Arrays.toString(versions.toArray(new String[0]));
                         version = version.replace('[', '{');
                         version = version.replace(']', '}');
                     }

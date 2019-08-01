@@ -5,12 +5,10 @@ apply plugin: 'maven'
 
 buildscript {
     repositories {
-        maven {
-            url "https://plugins.gradle.org/m2/"
-        }
+        gradlePluginPortal()
     }
     dependencies {
-        classpath "gradle.plugin.net.minecrell:licenser:0.2.1"
+        classpath "gradle.plugin.net.minecrell:licenser:0.4.1"
     }
 }
 
@@ -48,9 +46,12 @@ license {
 }
 
 dependencies {
-    compile 'org.ow2.asm:asm-all:5.1'
-    compile 'com.google.code.gson:gson:2.6.2'
-    compile 'commons-io:commons-io:2.5'
-    compile 'commons-codec:commons-codec:1.10'
-    compile 'com.beust:jcommander:1.48'
+    compile 'org.ow2.asm:asm:7.1'
+    compile 'org.ow2.asm:asm-commons:7.1'
+    compile 'org.ow2.asm:asm-tree:7.1'
+    compile 'org.ow2.asm:asm-util:7.1'
+    compile 'com.google.code.gson:gson:2.8.5'
+    compile 'commons-io:commons-io:2.6'
+    compile 'commons-codec:commons-codec:1.13'
+    compile 'com.beust:jcommander:1.72'
 }
