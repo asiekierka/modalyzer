@@ -22,16 +22,22 @@ import org.apache.commons.io.IOUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public class MCPDataManager {
     private static class MCPVersion {
-        final String mcpFile;
+        final List<String> mcpFile;
         final boolean hasSides;
 
         MCPVersion(String mcpFile, boolean hasSides) {
-            this.mcpFile = mcpFile;
+            this.mcpFile = Collections.singletonList(mcpFile);
+            this.hasSides = hasSides; // my sides
+        }
+
+        MCPVersion(String[] mcpFile, boolean hasSides) {
+            this.mcpFile = Arrays.asList(mcpFile);
             this.hasSides = hasSides; // my sides
         }
     }
@@ -218,6 +224,15 @@ public class MCPDataManager {
         MAPPINGS.put(target + "-server", mapServer);
     }
 
+    private ZipEntry getEntry(ZipFile zipFile, String name) {
+        ZipEntry entry = zipFile.getEntry(name);
+        if (entry == null) {
+            entry = zipFile.getEntry(name.replace('/', '\\'));
+        }
+        return entry;
+    }
+
+
     private void loadMappings(String version) throws IOException {
         File mappingClient = new File(MCP_DIR, version + "-client.map");
         File mappingServer = new File(MCP_DIR, version + "-server.map");
@@ -225,27 +240,36 @@ public class MCPDataManager {
             MAPPINGS.put(version + "-client", new HashSet<>(FileUtils.readLines(mappingClient, "UTF-8")));
             MAPPINGS.put(version + "-server", new HashSet<>(FileUtils.readLines(mappingServer, "UTF-8")));
         } else {
-            File mcpFile = new File(MCP_DIR, MCP_VERSION_MAP.get(version).mcpFile);
-            if (mcpFile.exists()) {
+            File mcpFile = null;
+            MCPVersion mcpVersion = MCP_VERSION_MAP.get(version);
+            for (String s : mcpVersion.mcpFile) {
+                File mcpFileTry = new File(MCP_DIR, s);
+                if (mcpFileTry.exists()) {
+                    mcpFile = mcpFileTry;
+                    break;
+                }
+            }
+
+            if (mcpFile != null) {
                 ZipFile zipFile = new ZipFile(mcpFile);
-                ZipEntry joinedSrgEntry = zipFile.getEntry("conf/joined.srg");
+                ZipEntry joinedSrgEntry = getEntry(zipFile, "conf/joined.srg");
                 if (joinedSrgEntry != null) {
                     loadJoinedSrgMapping(version, zipFile, joinedSrgEntry);
                 } else {
-                    ZipEntry clientSrgEntry = zipFile.getEntry("conf/client.srg");
-                    ZipEntry serverSrgEntry = zipFile.getEntry("conf/server.srg");
+                    ZipEntry clientSrgEntry = getEntry(zipFile, "conf/client.srg");
+                    ZipEntry serverSrgEntry = getEntry(zipFile, "conf/server.srg");
                     if (clientSrgEntry != null && serverSrgEntry != null) {
                         loadSrgMapping(version + "-client", zipFile, clientSrgEntry);
                         loadSrgMapping(version + "-server", zipFile, serverSrgEntry);
                     } else {
-                        ZipEntry csvFields = zipFile.getEntry("conf/fields.csv");
-                        ZipEntry csvMethods = zipFile.getEntry("conf/methods.csv");
+                        ZipEntry csvFields = getEntry(zipFile, "conf/fields.csv");
+                        ZipEntry csvMethods = getEntry(zipFile, "conf/methods.csv");
                         if (csvFields != null && csvMethods != null) {
                             loadCsvMapping(version, zipFile, csvFields, csvMethods);
                         } else {
                             System.err.println("MCP file for Minecraft " + version + " (" + mcpFile.toString() + ") stored in an unknown format!");
-                            MAPPINGS.put(version + "-client", Collections.EMPTY_SET);
-                            MAPPINGS.put(version + "-server", Collections.EMPTY_SET);
+                            MAPPINGS.put(version + "-client", Collections.emptySet());
+                            MAPPINGS.put(version + "-server", Collections.emptySet());
                         }
                     }
                 }
@@ -258,15 +282,29 @@ public class MCPDataManager {
                     FileUtils.writeLines(mappingServer, MAPPINGS.get(version + "-server"));
                 }
             } else {
-                System.err.println("MCP file for Minecraft " + version + " (" + mcpFile.toString() + ") not found!");
-                MAPPINGS.put(version + "-client", Collections.EMPTY_SET);
-                MAPPINGS.put(version + "-server", Collections.EMPTY_SET);
+                System.err.println("MCP file for Minecraft " + version + " (" + String.join(", ", mcpVersion.mcpFile) + ") not found!");
+                MAPPINGS.put(version + "-client", Collections.emptySet());
+                MAPPINGS.put(version + "-server", Collections.emptySet());
             }
         }
     }
 
     static {
-        MCP_VERSION_MAP.put("b1.6.6", new MCPVersion("mcp41.zip", true));
+       /* MCP_VERSION_MAP.put("a1.1.2_01", new MCPVersion("revengpack16.zip", true));
+        MCP_VERSION_MAP.put("a1.2.1_01", new MCPVersion(new String[]{"mcp21.zip", "mcp20.zip"}, true));
+        MCP_VERSION_MAP.put("a1.2.2", new MCPVersion(new String[]{"mcp22a.zip", "mcp22.zip"}, true));
+        MCP_VERSION_MAP.put("a1.2.3_04", new MCPVersion("mcp23.zip", true));
+        MCP_VERSION_MAP.put("a1.2.5", new MCPVersion("mcp24.zip", true));
+        MCP_VERSION_MAP.put("a1.2.6", new MCPVersion("mcp25.zip", true));
+        MCP_VERSION_MAP.put("b1.1_02", new MCPVersion("mcp26.zip", true));
+        MCP_VERSION_MAP.put("b1.2_02", new MCPVersion("mcp28.zip", true));
+        MCP_VERSION_MAP.put("b1.3_01", new MCPVersion("mcp29a.zip", true));
+        MCP_VERSION_MAP.put("b1.4", new MCPVersion("mcp210.zip", true)); */
+        MCP_VERSION_MAP.put("b1.4_01", new MCPVersion(new String[]{"mcp30.zip"/*, "mcp211.zip"*/}, true));
+        MCP_VERSION_MAP.put("b1.5_01", new MCPVersion(new String[]{"mcp31.zip"/*, "mcp212.zip"*/}, true));
+        MCP_VERSION_MAP.put("b1.6.4", new MCPVersion("mcp32.zip", true));
+        MCP_VERSION_MAP.put("b1.6.5", new MCPVersion("mcp33.zip", true));
+        MCP_VERSION_MAP.put("b1.6.6", new MCPVersion(new String[]{"mcp41.zip", "mcp40.zip", "mcp34.zip"}, true));
         MCP_VERSION_MAP.put("b1.7.2", new MCPVersion("mcp42.zip", true));
         MCP_VERSION_MAP.put("b1.7.3", new MCPVersion("mcp43.zip", true));
         MCP_VERSION_MAP.put("b1.8.1", new MCPVersion("mcp44.zip", true));
@@ -292,8 +330,8 @@ public class MCPDataManager {
         MCP_VERSION_MAP.put("1.7.10", new MCPVersion("mcp908.zip", false));
         MCP_VERSION_MAP.put("1.8", new MCPVersion("mcp910.zip", false));
         MCP_VERSION_MAP.put("1.8.8", new MCPVersion("mcp918.zip", false));
-        MCP_VERSION_MAP.put("1.9", new MCPVersion("mcp924.zip", false));
-        MCP_VERSION_MAP.put("1.9.4", new MCPVersion("mcp928.zip", false));
+        MCP_VERSION_MAP.put("1.9", new MCPVersion(new String[]{"mcp924_1.zip", "mcp924.zip"}, false));
+        MCP_VERSION_MAP.put("1.9.4", new MCPVersion(new String[]{"mcp928_1.zip", "mcp928.zip"}, false));
         MCP_VERSION_MAP.put("1.10", new MCPVersion("mcp931.zip", false));
         MCP_VERSION_MAP.put("1.11.2", new MCPVersion("mcp937.zip", false));
         MCP_VERSION_MAP.put("1.12", new MCPVersion("mcp940.zip", false));
