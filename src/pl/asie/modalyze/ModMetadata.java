@@ -16,6 +16,10 @@
 
 package pl.asie.modalyze;
 
+import lombok.Getter;
+
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,5 +33,37 @@ public class ModMetadata {
     public Map<String, String> dependencies;
     public boolean hasCoremod;
 
+    @Getter
+    private transient List<String> versionCandidates = new ArrayList<>();
     public transient boolean valid;
+
+    public void addVersionCandidate(String candidate) {
+        versionCandidates.add(candidate);
+    }
+
+    public void addModLoaderStyleDependency(String dep) {
+        if (dependencies == null) {
+            dependencies = new HashMap<>();
+        }
+
+        String modName = dep;
+        String modVersion = "*";
+        if (dep.contains("@")) {
+            modName = dep.split("@")[0];
+            if (dep.split("@").length == 2) {
+                modVersion = dep.split("@")[1];
+            }
+        }
+
+        modName = modName.trim();
+        modVersion = modVersion.trim();
+
+        if (dependencies.containsKey(modName)) {
+            if (!"*".equals(modVersion) && "*".equals(dependencies.get(modName))) {
+                dependencies.put(modName, modVersion);
+            }
+        } else {
+            dependencies.put(modName, modVersion);
+        }
+    }
 }
